@@ -16,9 +16,8 @@ extern const coap_endpoint_t endpoints[];
 extern coap_endpoint_t *endpoints;
 #endif
 
-#define COAP_DEBUG
 
-#ifdef COAP_DEBUG
+#ifdef DEBUG
 void coap_dump_header(coap_header_t *header)
 {
         printf("Header:\n");
@@ -31,7 +30,7 @@ void coap_dump_header(coap_header_t *header)
 #endif
 
 
-#ifdef COAP_DEBUG
+#ifdef DEBUG
 void coap_dump_buffer(const uint8_t *buf, size_t buflen, bool bare)
 {
         if (bare) {
@@ -52,7 +51,7 @@ void coap_dump_buffer(const uint8_t *buf, size_t buflen, bool bare)
 #endif
 
 
-#ifdef COAP_DEBUG
+#ifdef DEBUG
 void coap_dump_options(coap_option_t *opts, size_t numopt)
 {
         size_t i;
@@ -67,7 +66,7 @@ void coap_dump_options(coap_option_t *opts, size_t numopt)
 #endif
 
 
-#ifdef COAP_DEBUG
+#ifdef DEBUG
 void coap_dump_packet(coap_packet_t *pkt)
 {
         coap_dump_header(&pkt->header);
@@ -446,6 +445,8 @@ int coap_make_ack(      coap_packet_t    *pkt,
 }
 
 
+// FIXME This function always sends the content format option, even when the
+// response code is an error (e.g. 4.04 NOT FOUND)
 int coap_make_response(      coap_rw_buffer_t    *scratch,
                              coap_packet_t       *pkt,
                        const uint8_t             *content,
@@ -497,8 +498,7 @@ int coap_make_response(      coap_rw_buffer_t    *scratch,
 
 
 // FIXME This function always sends the content format option, even when the response code
-// is an error (e.g. 4.04 NOT FOUND), see https://github.com/backenklee/microcoap/issues/1
-// for details
+// is an error (e.g. 4.04 NOT FOUND)
 int coap_make_pb_response(      coap_rw_buffer_t    *scratch,
                                 coap_packet_t       *pkt,
                           const uint8_t             *content,
@@ -540,11 +540,16 @@ int coap_make_pb_response(      coap_rw_buffer_t    *scratch,
         
         pkt->payload.p   = content;
         pkt->payload.len = content_len;
+        
         return 0;
 }
 
 
-int coap_handle_req(coap_rw_buffer_t *scratch, const coap_packet_t *inpkt, coap_packet_t *outpkt, bool pb, bool con)
+int coap_handle_req(      coap_rw_buffer_t *scratch,
+                    const coap_packet_t    *inpkt,
+                          coap_packet_t    *outpkt,
+                          bool              pb,
+                          bool              con)
 {
         const coap_endpoint_t *ep   = endpoints;
         const coap_option_t   *opt;
@@ -586,7 +591,7 @@ int coap_handle_req(coap_rw_buffer_t *scratch, const coap_packet_t *inpkt, coap_
                         }
                         
                         // valid request, now call handler
-                        puts("coap.c: valid request, now call handler...");
+                                                
                         return ep->handler(scratch, inpkt, outpkt,
                                            inpkt->header.mid[0], inpkt->header.mid[1]);
                 }
@@ -605,6 +610,6 @@ int coap_handle_req(coap_rw_buffer_t *scratch, const coap_packet_t *inpkt, coap_
                                    inpkt->header.mid[1], &inpkt->token, rsp_code,
                                    COAP_CONTENTTYPE_NONE, con);
         }
-        puts("coap.c: no handler found");
+        
         return 0;
 }
