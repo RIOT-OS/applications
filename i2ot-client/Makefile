@@ -1,5 +1,5 @@
 # name of your application
-APPLICATION = posix_sockets
+APPLICATION = i2ot-client
 
 # If no BOARD is found in the environment, use this default:
 BOARD ?= native
