@@ -28,7 +28,7 @@ USEMODULE += ps
 # Comment this out to disable code in RIOT that does safety checking
 # which is not needed in a production environment but helps in the
 # development process:
-CFLAGS += -DDEVELHELP
+CFLAGS += -DDEVELHELP -DCOAP_DEBUG
 
 # Change this to 0 show compiler invocation lines by default:
 QUIET ?= 1

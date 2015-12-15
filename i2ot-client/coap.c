@@ -17,7 +17,7 @@ extern coap_endpoint_t *endpoints;
 #endif
 
 
-#ifdef DEBUG
+#ifdef COAP_DEBUG
 void coap_dump_header(coap_header_t *header)
 {
     printf("Header:\n");
@@ -30,7 +30,7 @@ void coap_dump_header(coap_header_t *header)
 #endif
 
 
-#ifdef DEBUG
+#ifdef COAP_DEBUG
 void coap_dump_buffer(const uint8_t *buf, size_t buflen, bool bare)
 {
     if (bare) {
@@ -51,7 +51,7 @@ void coap_dump_buffer(const uint8_t *buf, size_t buflen, bool bare)
 #endif
 
 
-#ifdef DEBUG
+#ifdef COAP_DEBUG
 void coap_dump_options(coap_option_t *opts, size_t numopt)
 {
     size_t i;
@@ -67,7 +67,7 @@ void coap_dump_options(coap_option_t *opts, size_t numopt)
 #endif
 
 
-#ifdef DEBUG
+#ifdef COAP_DEBUG
 void coap_dump_packet(coap_packet_t *pkt)
 {
     coap_dump_header(&pkt->header);
