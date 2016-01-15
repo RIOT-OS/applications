@@ -13,7 +13,7 @@ You can use [marz](https://github.com/sgso/marz) to tunnel CoAP messages into th
 2. Run `sudo apt-get install bridge-utils`
 3. In your RIOT directury, run
 
-    ./cpu/native/tapsetup.sh create 2
+    ./dist/tools/tapsetup/tapsetup --create 2
 
 This will set up two tap devices connected by a bridge. our RIOT application and 
 marz will each listen at one of these devices, and communicate over the bridge.
