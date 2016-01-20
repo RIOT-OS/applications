@@ -13,7 +13,7 @@ You can use [marz](https://github.com/sgso/marz) to tunnel CoAP messages into th
 2. Run `sudo apt-get install bridge-utils`
 3. In your RIOT directury, run
 
-    ./cpu/native/tapsetup.sh create 2
+    ./dist/tools/tapsetup/tapsetup --create 2
 
 This will set up two tap devices connected by a bridge. our RIOT application and 
 marz will each listen at one of these devices, and communicate over the bridge.
@@ -25,7 +25,7 @@ marz will each listen at one of these devices, and communicate over the bridge.
     cd applications/microcoap
     sudo ./bin/native/microcoap-example.elf tap1 -i 1
 
-*Make sure to bind it to ``tap1``, since marz will be bound to ``tap0`!*  
+*Make sure to bind it to ``tap1``, since marz will be bound to ``tap0`!*
 ``-i 1`` forces your RIOT instance to match its id to the one specified in marz.config. You should **only** specify this for the **one** RIOT that marz tunnels to. This is sufficient for this example; if you need help running more than one RIOT with marz, please contact the author of this example.
 
 You should see output similar to this.
@@ -77,8 +77,9 @@ The "Copper" firefox plugin is a convenient way to test CoAP endpoints. In the a
 
 ### Using python(3)
 
-First, make sure Python 3 is installed, clone `aiocoap` into a directory of your choice and then change into it:
+First, make sure Python 3 and pip are installed. If this is the case, install ``asyncio``, clone `aiocoap` into a directory of your choice and then change into it:
 
+    pip install asyncio &&
     git clone git@github.com:chrysn/aiocoap.git &&
         cd aiocoap
 
