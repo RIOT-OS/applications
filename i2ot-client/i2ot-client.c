@@ -188,7 +188,7 @@ static void *coap_server_thread(void *args)
             continue;
         }
 
-        coap_dump_packet(&inpkt);
+        // coap_dump_packet(&inpkt);
 
         bad_packet = coap_handle_req(&scratch, &inpkt, &outpkt, true, false);
 
@@ -225,7 +225,7 @@ static int coap_start_server(char *port_str)
 
     /* start server (which means registering pktdump for the chosen port) */
     if (thread_create(server_stack, sizeof(server_stack), THREAD_PRIORITY_MAIN - 1,
-                      CREATE_STACKTEST, coap_server_thread, port_str, "UDP server") <= KERNEL_PID_UNDEF) {
+                      THREAD_CREATE_STACKTEST, coap_server_thread, port_str, "UDP server") <= KERNEL_PID_UNDEF) {
         server_socket = -1;
         puts("ERROR initializing thread");
         return 1;
@@ -277,14 +277,14 @@ static void *i2ot_server_thread(void *args)
     initval = 54321;
 #endif
 
-    genrand_init(initval);
+    random_init(initval);
 
     while (1) {
         pkt_buf_len = sizeof(pkt_buf);
         rcv_buf_len = sizeof(rcv_buf);
 
-        mid_rand = (uint16_t)genrand_uint32();
-        token_rand = genrand_uint32();
+        mid_rand = (uint16_t)random_uint32();
+        token_rand = random_uint32();
 
         req_hdr.mid[0] = ((uint8_t *)&mid_rand)[0];
         req_hdr.mid[1] = ((uint8_t *)&mid_rand)[1];
@@ -325,7 +325,7 @@ static void *i2ot_server_thread(void *args)
             goto sleep;
         }
 
-        coap_dump_packet(&rcv_pkt);
+        // coap_dump_packet(&rcv_pkt);
 
 sleep:
         sleep(1);
@@ -338,7 +338,7 @@ sleep:
 static int i2ot_client_start(void)
 {
     if (thread_create(sender_stack, sizeof(sender_stack), THREAD_PRIORITY_MAIN - 1,
-                      CREATE_STACKTEST, i2ot_server_thread, NULL, "UDP server") <= KERNEL_PID_UNDEF) {
+                      THREAD_CREATE_STACKTEST, i2ot_server_thread, NULL, "UDP server") <= KERNEL_PID_UNDEF) {
         sender_socket = -1;
         puts("error initializing thread");
         return 1;
@@ -393,9 +393,9 @@ static int i2ot_client_init(char *rt)
     initval = 61524;
 #endif
 
-    genrand_init(initval);
+    random_init(initval);
 
-    mid = (uint16_t)genrand_uint32();
+    mid = (uint16_t)random_uint32();
 
     coap_option_t opt_uri_path_01 = {
         .val    = { .p = (uint8_t *)".well-known", .len = strlen(".well-known") },
