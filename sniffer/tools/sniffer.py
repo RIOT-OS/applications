@@ -161,7 +161,7 @@ def main():
     conn = connect(args)
 
     sleep(1)
-    configure_interface(conn, int(args.channel))
+    configure_interface(conn, args.channel)
     sleep(1)
 
     # figure out where to write
