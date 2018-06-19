@@ -136,16 +136,46 @@ def connect(args):
 
     return conn
 
+
+class ArgparseError(Exception):
+    pass
+
+
+class ArgumentParser(argparse.ArgumentParser):
+    def __init__(self, extra_usage=None, *args, **kwargs):
+        super(ArgumentParser, self).__init__(*args, **kwargs)
+        self.extra_usage = extra_usage
+
+    def error(self, message):
+        if message.startswith("argument conn_type: invalid choice: "):
+            raise ArgparseError(message)
+        else:
+            if self.extra_usage is not None:
+                print(self.extra_usage, file=sys.stderr)
+            super(ArgumentParser, self).error(message)
+
+
+def add_serial_args(p):
+    p.add_argument("tty", type=str,
+                   help="Serial port to board with sniffer application")
+    p.add_argument("baudrate", type=int,
+                   help="Baudrate of the serial port")
+
+
+def add_general_args(p):
+    p.add_argument("channel", type=int, help="Channel to sniff on")
+    p.add_argument("outfile", type=str, default=None, nargs="?",
+                   help="PCAP file to output to")
+
+
 def main():
-    p = argparse.ArgumentParser()
+    p = ArgumentParser()
     sp = p.add_subparsers(dest="conn_type")
     serial_p = sp.add_parser("serial",
                              help="Parse output of sniffer application "
-                                  "connected via serial line")
-    serial_p.add_argument("tty", type=str,
-                          help="Serial port to board with sniffer application")
-    serial_p.add_argument("baudrate", type=int,
-                          help="Baudrate of the serial port")
+                                  "connected via serial line (default when no "
+                                  "subcommand is used)")
+    add_serial_args(serial_p)
     socket_p = sp.add_parser("socket",
                              help="Parse output of a TCP-connected sniffer "
                                   "application")
@@ -153,10 +183,16 @@ def main():
                           help="Host of the TCP-based sniffer application")
     socket_p.add_argument("port", type=int,
                           help="Port of the TCP-based sniffer application")
-    p.add_argument("channel", type=int, help="Channel to sniff on")
-    p.add_argument("outfile", type=str, default=None, nargs="?",
-                   help="PCAP file to output to")
-    args = p.parse_args()
+    add_general_args(p)
+    try:
+        args = p.parse_args()
+    except ArgparseError:
+        old_help = p.format_help()
+        p = ArgumentParser(extra_usage=old_help)
+        add_serial_args(p)
+        add_general_args(p)
+        p.set_defaults(conn_type="serial")
+        args = p.parse_args()
 
     conn = connect(args)
 
