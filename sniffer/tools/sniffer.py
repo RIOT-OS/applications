@@ -153,10 +153,9 @@ def main():
                           help="Host of the TCP-based sniffer application")
     socket_p.add_argument("port", type=int,
                           help="Port of the TCP-based sniffer application")
-    for ps in (serial_p, socket_p):
-        ps.add_argument("channel", type=int, help="Channel to sniff on")
-        ps.add_argument("outfile", type=str, default=None, nargs="?",
-                        help="PCAP file to output to")
+    p.add_argument("channel", type=int, help="Channel to sniff on")
+    p.add_argument("outfile", type=str, default=None, nargs="?",
+                   help="PCAP file to output to")
     args = p.parse_args()
 
     conn = connect(args)
