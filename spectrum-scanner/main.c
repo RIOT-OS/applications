@@ -57,6 +57,10 @@
 void spectrum_scanner(unsigned long interval_us)
 {
     size_t netif_numof = gnrc_netif_numof();
+    if (netif_numof == 0) {
+        puts("No network interfaces found!");
+        return;
+    }
 
     /* Using expf(x) (natural exponent) gives quicker computations on Cortex-M0+,
      * compared to using powf(10, x). */
