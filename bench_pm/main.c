@@ -1,0 +1,208 @@
+/*
+ * Copyright (C) 2017-2018 SKF AB
+ * Copyright (C) 2014 Freie Universität Berlin
+ *
+ * This file is subject to the terms and conditions of the GNU Lesser General
+ * Public License v2.1. See the file LICENSE in the top level directory for more
+ * details.
+ */
+
+/**
+ * @ingroup tests
+ * @{
+ *
+ * @file
+ * @brief       Test for low power modes and wake up timings
+ *
+ * This test will switch to different low power modes and wait for wake events.
+ *
+ * @author      Hauke Petersen <hauke.petersen@fu-berlin.de>
+ *
+ * @}
+ */
+
+#include <stdio.h>
+#include <stdint.h>
+
+#include "cpu.h"
+#include "board.h"
+#include "periph_conf.h"
+#include "periph/rtt.h"
+#ifdef MODULE_PM_LAYERED
+#include "pm_layered.h"
+#endif
+#ifdef MODULE_PERIPH_GPIO_IRQ
+#include "periph/gpio.h"
+#endif
+#ifdef MODULE_PERIPH_LLWU
+/* Kinetis specific low leakage mode handling */
+#include "llwu.h"
+#endif
+
+#ifndef ENABLE_DEBUG
+/* Enabling debug prints will affect timing measurements */
+#define ENABLE_DEBUG        (0)
+#endif
+#include "debug.h"
+
+#ifdef MODULE_PERIPH_RTT
+#define PRINT_RTT() (printf("RTT: %" PRIu32 "\n", rtt_get_counter()))
+#else
+#define PRINT_RTT()
+#endif
+
+#ifndef GPIO_WAKE_PIN
+#if defined(BOARD_FRDM_KW41Z)
+#define GPIO_WAKE_PIN       GPIO_PIN(PORT_C, 4) /* FRDM-KW41Z -> SW3 */
+#elif defined(BOARD_FRDM_K22F)
+#define GPIO_WAKE_PIN       GPIO_PIN(PORT_C, 1) /* FRDM-K22F -> SW2 */
+#elif defined(BOARD_FRDM_K64F)
+#define GPIO_WAKE_PIN       GPIO_PIN(PORT_A, 4) /* FRDM-K64F -> SW3 */
+#elif defined(BOARD_SAMR21_XPRO)
+#define GPIO_WAKE_PIN       BTN0_PIN /* SAMR21-XPRO -> SW0 */
+#endif /* defined(BOARD_xxx) */
+#endif /* !defined(GPIO_WAKE_PIN) */
+
+#ifndef LLWU_WAKE_PIN
+#if defined(BOARD_FRDM_KW41Z)
+#define LLWU_WAKE_PIN       LLWU_WAKEUP_PIN_PTC4
+#elif defined(BOARD_FRDM_K22F)
+#define LLWU_WAKE_PIN       LLWU_WAKEUP_PIN_PTC1
+#elif defined(BOARD_FRDM_K64F)
+#define LLWU_WAKE_PIN       LLWU_WAKEUP_PIN_PTA4
+#endif
+#endif /* LLWU_WAKE_PIN */
+
+#ifndef TEST_PIN_ON
+#define TEST_PIN_ON LED0_ON
+#endif
+#ifndef TEST_PIN_OFF
+#define TEST_PIN_OFF LED0_OFF
+#endif
+
+#ifndef TEST_ISR_PIN_ON
+#ifdef LED1_ON
+#define TEST_ISR_PIN_ON LED1_ON
+#else
+#define TEST_ISR_PIN_ON
+#endif
+#endif
+#ifndef TEST_ISR_PIN_OFF
+#ifdef LED1_OFF
+#define TEST_ISR_PIN_OFF LED1_OFF
+#else
+#define TEST_ISR_PIN_OFF
+#endif
+#endif
+
+#ifdef MODULE_PERIPH_RTT
+#define TICKS_TO_WAIT       (10 * RTT_FREQUENCY)
+#endif /* MODULE_PERIPH_RTT */
+
+static volatile unsigned busy = 0;
+
+#ifdef MODULE_PERIPH_RTT
+static void cb_rtt(void *arg)
+{
+    (void)arg;
+    TEST_ISR_PIN_ON;
+    DEBUG("RTT IRQ\n");
+
+    busy = 0;
+}
+#endif /* MODULE_PERIPH_RTT */
+
+#ifdef MODULE_PERIPH_LLWU
+static void cb_llwu(void *arg)
+{
+    (void)arg;
+    TEST_ISR_PIN_ON;
+    DEBUG("llwu pin\n");
+
+    busy = 0;
+}
+#endif /* MODULE_PERIPH_LLWU */
+
+#ifdef MODULE_PERIPH_GPIO_IRQ
+static void cb_gpio(void *arg)
+{
+    (void)arg;
+    TEST_ISR_PIN_ON;
+    DEBUG("gpio pin\n");
+
+    busy = 0;
+}
+#endif /* MODULE_PERIPH_GPIO_IRQ */
+
+int main(void)
+{
+    TEST_PIN_ON;
+    puts("\nRIOT power consumption and wake timing test application");
+
+#ifdef MODULE_PERIPH_LLWU
+    /* Kinetis specific */
+    puts("Enable LLWU wake up from RTC");
+    llwu_wakeup_module_enable(LLWU_WAKEUP_MODULE_RTC_ALARM);
+    puts("Enable LLWU IRQ on PTC4 (SW4) falling");
+    gpio_init(GPIO_WAKE_PIN, GPIO_IN);
+    llwu_wakeup_pin_set(LLWU_WAKE_PIN, LLWU_WAKEUP_EDGE_FALLING, cb_llwu, NULL);
+#endif /* MODULE_PERIPH_LLWU */
+#ifdef MODULE_PERIPH_GPIO_IRQ
+    puts("Enable GPIO IRQ on PTC4 (SW4) falling");
+    int res = gpio_init_int(GPIO_WAKE_PIN, GPIO_IN_PU, GPIO_FALLING, cb_gpio, NULL);
+    if (res != 0) {
+        printf("!! gpio_init_int: %d\n", res);
+    }
+#endif /* MODULE_PERIPH_GPIO_IRQ */
+
+#ifdef MODULE_PERIPH_RTT
+    puts("Initializing the RTT driver");
+    rtt_init();
+#endif /* MODULE_PERIPH_RTT */
+
+#if ENABLE_CLKOUT
+    /* Kinetis specific, clock monitor via CLKOUT on pin PTB3 */
+    puts("Enable CLKOUT on PTB3");
+    PORTB->PCR[3] = PORT_PCR_MUX(4);
+    /* Select which clock to output */
+    SIM->SOPT2 = (SIM->SOPT2 & ~SIM_SOPT2_CLKOUTSEL_MASK) | SIM_SOPT2_CLKOUTSEL(2);
+    /* Use a logic analyzer or oscilloscope to look at the signal */
+#endif
+
+    while (1) {
+        PRINT_RTT();
+        puts("Busy spin");
+        {
+#ifdef MODULE_PERIPH_RTT
+            uint32_t rtt_target = rtt_get_counter() + TICKS_TO_WAIT;
+            rtt_target &= RTT_MAX_VALUE;
+            rtt_set_alarm(rtt_target, cb_rtt, 0);
+#endif /* MODULE_PERIPH_RTT */
+            busy = 1;
+            TEST_PIN_OFF;
+            TEST_ISR_PIN_OFF;
+            while (busy) {
+                __asm__ volatile ("" ::: "memory");
+            }
+            TEST_PIN_ON;
+            PRINT_RTT();
+        }
+#ifdef MODULE_PM_LAYERED
+        for (int k = PM_NUM_MODES; 0 <= k; --k) {
+#ifdef MODULE_PERIPH_RTT
+            uint32_t rtt_target = rtt_get_counter() + TICKS_TO_WAIT;
+            rtt_target &= RTT_MAX_VALUE;
+            rtt_set_alarm(rtt_target, cb_rtt, 0);
+#endif /* MODULE_PERIPH_RTT */
+            PRINT_RTT();
+            printf("pm_set(%d)\n", k);
+            TEST_PIN_OFF;
+            TEST_ISR_PIN_OFF;
+            pm_set((unsigned)k);
+            TEST_PIN_ON;
+            printf("wake from %d\n", k);
+        }
+#endif
+    }
+    return 0;
+}
