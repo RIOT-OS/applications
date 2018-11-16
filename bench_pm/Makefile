@@ -3,7 +3,7 @@ BOARD ?= frdm-kw41z
 
 RIOTBASE ?= $(CURDIR)/../../RIOT
 QUIET ?= 1
-CFLAGS += -DDEVELHELP
+DEVELHELP ?= 1
 
 FEATURES_OPTIONAL = periph_rtt periph_gpio_irq
 

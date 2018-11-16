@@ -16,7 +16,7 @@
  *
  * This test will switch to different low power modes and wait for wake events.
  *
- * @author      Hauke Petersen <hauke.petersen@fu-berlin.de>
+ * @author      Joakim Nohlgård <joakim.nohlgard@eistec.se>
  *
  * @}
  */
