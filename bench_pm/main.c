@@ -52,26 +52,26 @@
 #endif
 
 #ifndef GPIO_WAKE_PIN
-#if defined(BOARD_FRDM_KW41Z)
-#define GPIO_WAKE_PIN       GPIO_PIN(PORT_C, 4) /* FRDM-KW41Z -> SW3 */
-#elif defined(BOARD_FRDM_K22F)
-#define GPIO_WAKE_PIN       GPIO_PIN(PORT_C, 1) /* FRDM-K22F -> SW2 */
-#elif defined(BOARD_FRDM_K64F)
-#define GPIO_WAKE_PIN       GPIO_PIN(PORT_A, 4) /* FRDM-K64F -> SW3 */
-#elif defined(BOARD_SAMR21_XPRO)
-#define GPIO_WAKE_PIN       BTN0_PIN /* SAMR21-XPRO -> SW0 */
-#endif /* defined(BOARD_xxx) */
-#endif /* !defined(GPIO_WAKE_PIN) */
+#ifdef BTN0_PIN
+#define GPIO_WAKE_PIN       BTN0_PIN
+#else
+#error Missing GPIO_WAKE_PIN configuration
+#endif
+#endif
 
+#ifdef MODULE_PERIPH_LLWU
+/* Platform specific configuration for testing Kinetis low leakage wake up module (LLWU) */
 #ifndef LLWU_WAKE_PIN
+/* This macro should correspond to the pin used in the GPIO_WAKE_PIN macro */
 #if defined(BOARD_FRDM_KW41Z)
 #define LLWU_WAKE_PIN       LLWU_WAKEUP_PIN_PTC4
 #elif defined(BOARD_FRDM_K22F)
 #define LLWU_WAKE_PIN       LLWU_WAKEUP_PIN_PTC1
 #elif defined(BOARD_FRDM_K64F)
-#define LLWU_WAKE_PIN       LLWU_WAKEUP_PIN_PTA4
+#define LLWU_WAKE_PIN       LLWU_WAKEUP_PIN_PTC6
 #endif
 #endif /* LLWU_WAKE_PIN */
+#endif /* MODULE_PERIPH_LLWU */
 
 #ifndef TEST_PIN_ON
 #define TEST_PIN_ON LED0_ON
