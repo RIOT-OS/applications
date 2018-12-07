@@ -60,13 +60,15 @@
 #define PRINT_RTT()
 #endif
 
+#ifdef MODULE_PERIPH_GPIO_IRQ
 #ifndef GPIO_WAKE_PIN
 #ifdef BTN0_PIN
 #define GPIO_WAKE_PIN       BTN0_PIN
 #else
 #error Missing GPIO_WAKE_PIN configuration
-#endif
-#endif
+#endif /* BTN0_PIN */
+#endif /* GPIO_WAKE_PIN */
+#endif /* MODULE_PERIPH_GPIO_IRQ */
 
 #ifdef MODULE_PERIPH_LLWU
 /* Platform specific configuration for testing Kinetis low leakage wake up module (LLWU) */
@@ -89,8 +91,8 @@
 #else
 #define TEST_PIN_ON
 #define TEST_PIN_OFF
-#endif
-#endif
+#endif /* LED0_ON */
+#endif /* TEST_PIN_ON */
 
 #ifndef TEST_ISR_PIN_ON
 #ifdef LED1_ON
@@ -99,8 +101,8 @@
 #else
 #define TEST_ISR_PIN_ON
 #define TEST_ISR_PIN_OFF
-#endif
-#endif
+#endif /* LED1_ON */
+#endif /* TEST_ISR_PIN_ON */
 
 #ifdef MODULE_PERIPH_RTT
 #define TICKS_TO_WAIT       (10 * RTT_FREQUENCY)
@@ -154,6 +156,7 @@ int main(void)
     gpio_init(GPIO_WAKE_PIN, GPIO_IN);
     llwu_wakeup_pin_set(LLWU_WAKE_PIN, LLWU_WAKEUP_EDGE_FALLING, cb_llwu, NULL);
 #endif /* MODULE_PERIPH_LLWU */
+
 #ifdef MODULE_PERIPH_GPIO_IRQ
     puts("Enable GPIO IRQ on PTC4 (SW4) falling");
     int res = gpio_init_int(GPIO_WAKE_PIN, GPIO_IN_PU, GPIO_FALLING, cb_gpio, NULL);
