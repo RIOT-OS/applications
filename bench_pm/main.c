@@ -74,23 +74,21 @@
 #endif /* MODULE_PERIPH_LLWU */
 
 #ifndef TEST_PIN_ON
-#define TEST_PIN_ON LED0_ON
+#ifdef LED0_ON
+#define TEST_PIN_ON         LED0_ON
+#define TEST_PIN_OFF        LED0_OFF
+#else
+#define TEST_PIN_ON
+#define TEST_PIN_OFF
 #endif
-#ifndef TEST_PIN_OFF
-#define TEST_PIN_OFF LED0_OFF
 #endif
 
 #ifndef TEST_ISR_PIN_ON
 #ifdef LED1_ON
-#define TEST_ISR_PIN_ON LED1_ON
+#define TEST_ISR_PIN_ON     LED1_ON
+#define TEST_ISR_PIN_OFF    LED1_OFF
 #else
 #define TEST_ISR_PIN_ON
-#endif
-#endif
-#ifndef TEST_ISR_PIN_OFF
-#ifdef LED1_OFF
-#define TEST_ISR_PIN_OFF LED1_OFF
-#else
 #define TEST_ISR_PIN_OFF
 #endif
 #endif
