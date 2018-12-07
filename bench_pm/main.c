@@ -45,6 +45,15 @@
 #endif
 #include "debug.h"
 
+#if COMA_MODE
+/* For testing deepest low power modes without any interference */
+#undef MODULE_PERIPH_GPIO_IRQ
+#undef MODULE_PERIPH_RTT
+#undef MODULE_PERIPH_LLWU
+#undef LED0_ON
+#undef LED1_ON
+#endif
+
 #ifdef MODULE_PERIPH_RTT
 #define PRINT_RTT() (printf("RTT: %" PRIu32 "\n", rtt_get_counter()))
 #else
@@ -165,6 +174,14 @@ int main(void)
     /* Select which clock to output */
     SIM->SOPT2 = (SIM->SOPT2 & ~SIM_SOPT2_CLKOUTSEL_MASK) | SIM_SOPT2_CLKOUTSEL(2);
     /* Use a logic analyzer or oscilloscope to look at the signal */
+#endif
+
+#if COMA_MODE
+    puts("Coma mode, going to pm_set(0), not coming back");
+    while (1) {
+        pm_set(0);
+        puts("woke up unexpectedly, going to pm_set(0)");
+    }
 #endif
 
     while (1) {
