@@ -109,7 +109,7 @@ void spectrum_scanner(unsigned long interval_us)
                         continue;
                     }
                     /* Convert dB to pseudo-energy before summing together the
-                     * measurements. "Pseudo" because we use the natural
+                     * measurements. "Pseudo" because we use the binary
                      * exponential function 2^x instead of computing 10^x which
                      * would be required if we needed the real measured energy.
                      * There is no need to know the real energy level because we
@@ -130,7 +130,7 @@ void spectrum_scanner(unsigned long interval_us)
             print("] ", 2);
             for (unsigned int ch = IEEE802154_CHANNEL_MIN; ch <= IEEE802154_CHANNEL_MAX; ++ch) {
                 /* Compute the average pseudo-energy and convert back to dB */
-                uint32_t ed = ilogbf(ed_average[k][ch] / count);
+                int32_t ed = ilogbf(ed_average[k][ch] / count);
                 print_u32_dec(ch);
                 print(": ", 2);
                 print_s32_dec(ed);
