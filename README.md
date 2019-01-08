@@ -33,8 +33,8 @@ git checkout master
 git pull
 ```
 
-Note, that this might lead to build errors, as we do not this repository against
-current master.
+Note, that there is no guarantee that it will build or work, since we only test
+this repository against the latest release.
 
 [riot-repo]: https://github.com/RIOT-OS/RIOT
 [riot-repo/examples]: https://github.com/RIOT-OS/RIOT/tree/master/examples
