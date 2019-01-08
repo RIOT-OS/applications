@@ -33,7 +33,7 @@ git checkout master
 git pull
 ```
 
-Note, that there is no guarantee that it will build or work, since we only test
+Note that there is no guarantee that it will build or work, since we only test
 this repository against the latest release.
 
 [riot-repo]: https://github.com/RIOT-OS/RIOT
