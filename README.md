@@ -4,8 +4,8 @@
 
 This repository provides more applications for the [RIOT operating system][riot-repo].
 Some of them are just useful tools for development work, others showcase
-software provided with RIOT beyond the simple examples [within the RIOT
-codebase][riot-repo/examples].
+more extensive implementations of features of RIOT compared to the rather simple
+[examples in the RIOT main codebase][riot-repo/examples].
 
 ## Usage
 
