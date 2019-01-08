@@ -1,8 +1,12 @@
 [![Build Status](https://travis-ci.org/RIOT-OS/applications.svg?branch=master)](https://travis-ci.org/RIOT-OS/applications)
 
+# RIOT Applications
+
 This repository provides some applications for the [RIOT operating system][riot-repo]. Some of them are just useful tools for
 development work, some showcase software provided with RIOT beyond the simple
 examples within the RIOT codebase.
+
+## Usage
 
 To build and use them follow [the instructions in the RIOT repository][getting-started]
 and the respective application's README.
