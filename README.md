@@ -2,9 +2,9 @@
 
 # RIOT Applications
 
-This repository provides some applications for the [RIOT operating system][riot-repo]. Some of them are just useful tools for
-development work, some showcase software provided with RIOT beyond the simple
-examples within the RIOT codebase.
+This repository provides more applications for the [RIOT operating system][riot-repo].
+Some of them are just useful tools for development work, others showcase
+software provided with RIOT beyond the simple examples within the RIOT codebase.
 
 ## Usage
 
