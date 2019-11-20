@@ -1,5 +1,5 @@
 # name of your application
-APPLICATION = configurator
+APPLICATION = configuration_over_nimble
 
 # If no BOARD is found in the environment, use this default:
 BOARD ?= nrf52dk
