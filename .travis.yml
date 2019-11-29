@@ -9,7 +9,7 @@ before_install:
 notifications:
   email:
     recipients:
-    - maintainers@riot-os.org
+    - maintainer@riot-os.org
     on_success: change
     on_failure: always
 
