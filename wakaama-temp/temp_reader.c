@@ -98,7 +98,7 @@ int temp_reader_start(const char *reader_name, lwm2m_context_t *lwm2m_ctx,
     _temp_instance = instance;
 
     _uri.flag = LWM2M_URI_FLAG_OBJECT_ID | LWM2M_URI_FLAG_INSTANCE_ID |
-               LWM2M_URI_FLAG_RESOURCE_ID;
+                LWM2M_URI_FLAG_RESOURCE_ID;
     _uri.objectId = LWM2M_MEASURED_TEMP_OBJECT_ID;
     _uri.instanceId = instance->shortID;
     _uri.resourceId = LWM2M_MEASURED_TEMP_RES_SENSOR_VALUE;
