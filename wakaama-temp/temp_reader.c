@@ -18,7 +18,9 @@
  * @}
  */
 
+#include <stdlib.h>
 #include "liblwm2m.h"
+#include "phydat.h"
 #include "saul_reg.h"
 #include "thread.h"
 #include "xtimer.h"
@@ -37,6 +39,10 @@ static lwm2m_context_t *_lwm2m_ctx;
 static lwm2m_uri_t _uri;
 static lwm2m_measured_temp_instance_t *_temp_instance;
 
+#define POW10_MAX ( 5)
+#define POW10_MIN (-5)
+static int pow10[] = {1, 10, 100, 1000, 10000};
+
 /*
  * Takes a sensor reading at a defined interval; does not exit.
  *
@@ -48,28 +54,41 @@ static void *_read_loop(void *arg)
     /* take a temperature reading */
     phydat_t phy;
 #ifdef BOARD_NATIVE
-    phy.val[0] = 100;
+    phy.val[0] = 10;
 #endif
 
     while (1) {
-#ifdef BOARD_NATIVE        
-        phy.val[0] += 10;
+#ifdef BOARD_NATIVE
+        phy.val[0] += 1;
+        phy.scale = 0;
+        phy.unit = UNIT_TEMP_C;
         int res = 1;
 #else
         int res = saul_reg_read(_saul_dev, &phy);
 #endif
         if (res) {
-            DEBUG("temperature: %d.%02d C\n", phy.val[0] / 100, phy.val[0] % 100);
+            if (phy.scale >= 0 && phy.scale <= POW10_MAX) {
+                _temp_instance->sensor_value = (double)phy.val[0] * pow10[phy.scale];
+            }
+            else if (phy.scale < 0 && phy.scale >= POW10_MIN) {
+                _temp_instance->sensor_value = (double)phy.val[0] / pow10[abs(phy.scale)];
+            }
+            else {
+                DEBUG("scale out of range: %d\n", phy.scale);
+                goto sleep;
+            }
+
+            DEBUG("temperature: %f, unit %u\n", _temp_instance->sensor_value,
+                  phy.unit);
+
+            /* mark changed for observers */
+            lwm2m_resource_value_changed(_lwm2m_ctx, &_uri);
         }
         else {
             DEBUG("Sensor read failure: %d\n", res);
         }
 
-        _temp_instance->sensor_value = (double)phy.val[0] / 100;
-
-        /* mark changed for observers */
-        lwm2m_resource_value_changed(_lwm2m_ctx, &_uri);
-
+        sleep:
         xtimer_sleep(TEMP_READER_INTERVAL);
     }
     return 0;
