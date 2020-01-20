@@ -19,6 +19,7 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
 #include "liblwm2m.h"
 #include "phydat.h"
 #include "saul_reg.h"
@@ -39,9 +40,12 @@ static lwm2m_context_t *_lwm2m_ctx;
 static lwm2m_uri_t _uri;
 static lwm2m_measured_temp_instance_t *_temp_instance;
 
-#define POW10_MAX ( 5)
-#define POW10_MIN (-5)
+#define POW10_MAX ( 4)
+#define POW10_MIN (-4)
 static int pow10[] = {1, 10, 100, 1000, 10000};
+#ifndef DECIMAL_CHAR
+#define DECIMAL_CHAR '.'
+#endif
 
 /*
  * Takes a sensor reading at a defined interval; does not exit.
@@ -69,17 +73,25 @@ static void *_read_loop(void *arg)
         if (res) {
             if (phy.scale >= 0 && phy.scale <= POW10_MAX) {
                 _temp_instance->sensor_value = (double)phy.val[0] * pow10[phy.scale];
+                DEBUG("temperature: %d, unit %u\n", phy.val[0] * pow10[phy.scale],
+                      phy.unit);
             }
             else if (phy.scale < 0 && phy.scale >= POW10_MIN) {
                 _temp_instance->sensor_value = (double)phy.val[0] / pow10[abs(phy.scale)];
+                if (ENABLE_DEBUG) {
+                    /* insert decimal point into string representation */
+                    char val_buf[10];
+                    int val_len = sprintf(val_buf, "%d", phy.val[0]);
+                    char *decimal_ptr = val_buf + val_len + phy.scale;
+                    memmove(decimal_ptr + 1, decimal_ptr, abs(phy.scale) + 1);
+                    *decimal_ptr = DECIMAL_CHAR;
+                    printf("temperature: %s, unit %u\n", val_buf, phy.unit);
+                }
             }
             else {
                 DEBUG("scale out of range: %d\n", phy.scale);
                 goto sleep;
             }
-
-            DEBUG("temperature: %f, unit %u\n", _temp_instance->sensor_value,
-                  phy.unit);
 
             /* mark changed for observers */
             lwm2m_resource_value_changed(_lwm2m_ctx, &_uri);
