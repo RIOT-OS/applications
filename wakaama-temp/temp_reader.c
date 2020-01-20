@@ -116,7 +116,7 @@ int temp_reader_start(const char *reader_name, lwm2m_context_t *lwm2m_ctx,
 #ifdef BOARD_NATIVE
     (void)reader_name;
     _saul_dev = NULL;
-    DEBUG("Ignoring sensor init on native");
+    DEBUG("Ignoring sensor init on native\n");
 #else
     _saul_dev = saul_reg_find_name(reader_name);
     if (_saul_dev == NULL) {
