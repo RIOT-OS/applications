@@ -17,6 +17,7 @@ USEMODULE += gnrc_ipv6_router_default
 USEMODULE += gnrc_sock_udp
 # Additional networking modules that can be dropped if not needed
 USEMODULE += gnrc_icmpv6_echo
+USEMODULE += gcoap
 # Add also the shell, some shell commands
 USEMODULE += shell
 USEMODULE += shell_commands
@@ -27,11 +28,11 @@ USEMODULE += ps
 # development process:
 DEVELHELP ?= 1
 
-# Specific the server URI  address (NOTE: Domain names not supported yet)
-SERVER_URI ?= '"coap://[fd00:dead:beef::1]"'
+# Specific the server address
+SERVER_ADDR ?= '"fd00:dead:beef::1"'
 
-ifneq (,$(SERVER_URI))
-  CFLAGS += -DLWM2M_SERVER_URI=$(SERVER_URI)
+ifneq (,$(SERVER_ADDR))
+  CFLAGS += -DLWM2M_SERVER_ADDR=$(SERVER_ADDR)
 endif
 
 include $(RIOTBASE)/Makefile.include

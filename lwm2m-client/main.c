@@ -22,6 +22,7 @@
 
 #include "msg.h"
 #include "shell.h"
+#include "lwm2m_client.h"
 
 #define SHELL_QUEUE_SIZE (4)
 static msg_t _shell_queue[SHELL_QUEUE_SIZE];
@@ -34,7 +35,10 @@ static int _cli_cmd(int argc, char **argv)
     }
 
     if (!strcmp(argv[1], "start")) {
-        printf("nothing to see here\n");
+        int ret = lwm2m_client_start();
+        if (ret < 0) {
+            printf("Failed to start: %d\n", ret);
+        }
         return 0;
     }
 
