@@ -23,16 +23,6 @@
 #include "net/gcoap.h"
 #include "lwm2m_client.h"
 
-/**
- * @name    States for the client
- * @{
- */
-#define LWM2M_STATE_INIT      (0)     /**< Not initialized yet */
-#define LWM2M_STATE_REG_SENT  (1)     /**< Sent initial registration */
-#define LWM2M_STATE_REG_FAIL  (2)
-#define LWM2M_STATE_REG_OK    (3)
-/** @} */
-
 #define _REG_PAYLOAD  "</>;rt=\"oma.lwm2m\",</1/0>,</3/0>"
 
 typedef struct {
@@ -143,4 +133,8 @@ int lwm2m_client_start(void) {
     }
     _client.state = LWM2M_STATE_REG_SENT;
     return 0;
+}
+
+int lwm2m_client_state(void) {
+    return _client.state;
 }

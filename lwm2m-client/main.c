@@ -41,15 +41,19 @@ static int _cli_cmd(int argc, char **argv)
         }
         return 0;
     }
+    else if (!strcmp(argv[1], "state")) {
+        printf("Client state: %d\n", lwm2m_client_state());
+        return 0;
+    }
 
 help_error:
-    printf("usage: %s <start>\n", argv[0]);
+    printf("usage: %s <start|state>\n", argv[0]);
 
     return 1;
 }
 
 static const shell_command_t my_commands[] = {
-    { "lwm2m", "Start LwM2M client", _cli_cmd },
+    { "lwm2m", "LwM2M client commands", _cli_cmd },
     { NULL, NULL, NULL }
 };
 

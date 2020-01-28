@@ -29,6 +29,16 @@ extern "C" {
 #define LWM2M_ERROR (256)
 
 /**
+ * @name    States for the client
+ * @{
+ */
+#define LWM2M_STATE_INIT      (0)     /**< Not initialized yet */
+#define LWM2M_STATE_REG_SENT  (1)     /**< Sent initial registration */
+#define LWM2M_STATE_REG_FAIL  (2)
+#define LWM2M_STATE_REG_OK    (3)
+/** @} */
+
+/**
  * @brief Registers with server.
  *
  * @return 0 on success
@@ -37,6 +47,15 @@ extern "C" {
  * @return -LWM2M_ERROR if some other error occurred
  */
 int lwm2m_client_start(void);
+
+/**
+ * Provides the current state of the client, and LWM2M_STATE... macro value
+ *
+ * Useful for testing.
+ *
+ * @return state
+ */
+int lwm2m_client_state(void);
 
 #ifdef __cplusplus
 }
