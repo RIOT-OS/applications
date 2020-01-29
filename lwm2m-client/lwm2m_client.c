@@ -89,13 +89,10 @@ static void _reg_handler(const gcoap_request_memo_t *memo, coap_pkt_t* pdu,
     (void)pdu;
     (void)remote;
 
-    if (memo->state == GCOAP_MEMO_TIMEOUT) {
-        DEBUG("lwm2m: registration timed out\n");
+    if (memo->state != GCOAP_MEMO_RESP) {
+        DEBUG("lwm2m: registration failed: %d\n", memo->state);
         _client.state = LWM2M_STATE_REG_FAIL;
-    }
-    else if (memo->state == GCOAP_MEMO_ERR) {
-        DEBUG("lwm2m: registration error\n");
-        _client.state = LWM2M_STATE_REG_FAIL;
+        return;
     }
     _client.state = LWM2M_STATE_REG_OK;
 }
