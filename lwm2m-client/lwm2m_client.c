@@ -23,7 +23,10 @@
 #include "net/gcoap.h"
 #include "lwm2m_client.h"
 
-#define _REG_PAYLOAD  "</>;rt=\"oma.lwm2m\",</1/0>,</3/0>"
+#define _REG_PAYLOAD  "</>;rt=\"oma.lwm2m\",</1/0>,</3/0>,</3303/0>"
+
+static ssize_t _temp_req_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len,
+                                 void *ctx);
 
 typedef struct {
     unsigned state;
@@ -34,18 +37,31 @@ static lwm2m_client_t _client = {
     .state = LWM2M_STATE_INIT,
 };
 
+/* CoAP resources. Must be sorted by path (ASCII order). */
+static const coap_resource_t _resources[] = {
+    { "/3303", COAP_GET | COAP_MATCH_SUBTREE, _temp_req_handler, NULL },
+};
+
+static gcoap_listener_t _listener = {
+    &_resources[0],
+    ARRAY_SIZE(_resources),
+    NULL, NULL
+};
+
 /*
- * Initialize server address/endpoint.
+ * Initialize client, including server address/endpoint.
+ *
+ * Must run only once!
  *
  * @return 0 on success
  * @return <0 if can't create address
  */
 static int _init(void) {
-    ipv6_addr_t addr;
+    gcoap_register_listener(&_listener);
 
     _client.server.family = AF_INET6;
 
-    /* parse for interface */
+    /* parse for interface specifier, like %1 */
     char *iface = ipv6_addr_split_iface(LWM2M_SERVER_ADDR);
     if (!iface) {
         if (gnrc_netif_numof() == 1) {
@@ -64,7 +80,9 @@ static int _init(void) {
         }
         _client.server.netif = pid;
     }
-    /* parse destination address */
+
+    /* build address */
+    ipv6_addr_t addr;
     if (ipv6_addr_from_str(&addr, LWM2M_SERVER_ADDR) == NULL) {
         DEBUG("lwm2m: unable to parse destination address\n");
         return -1;
@@ -95,6 +113,51 @@ static void _reg_handler(const gcoap_request_memo_t *memo, coap_pkt_t* pdu,
         return;
     }
     _client.state = LWM2M_STATE_REG_OK;
+}
+
+/*
+ * Temperature request (/3303) callback.
+ */
+static ssize_t _temp_req_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len,
+                                 void *ctx) {
+    (void)ctx;
+    coap_optpos_t opt = {0, 0};
+    uint8_t *opt_val;
+    unsigned path_i = 0;
+    bool is_value_req = false;
+
+    /* verify request is for /3303/0/5700 */
+    ssize_t optlen;
+    while ((optlen = coap_opt_get_next(pdu, &opt, &opt_val, !opt.opt_num)) > 0) {
+        if (opt.opt_num == COAP_OPT_URI_PATH) {
+            if (path_i == 2 && optlen == 4 && !strncmp((char *)opt_val, "5700", 4)) {
+                is_value_req = true;
+                break;
+            }
+            path_i++;
+        }
+    }
+
+    /* write response */
+    if (is_value_req) {
+        char *temp_val = "1.0";
+        gcoap_resp_init(pdu, buf, len, COAP_CODE_CONTENT);
+        coap_opt_add_format(pdu, COAP_FORMAT_TEXT);
+        size_t resp_len = coap_opt_finish(pdu, COAP_OPT_FINISH_PAYLOAD);
+
+        if (pdu->payload_len >= strlen(temp_val)) {
+            memcpy(pdu->payload, temp_val, strlen(temp_val));
+            return resp_len + strlen(temp_val);
+        }
+        else {
+            DEBUG("lwm2m: msg buffer too small\n");
+            return -1;
+        }
+    }
+    else {
+        DEBUG("lwm2m: request not for 5700\n");
+        return -1;
+    }
 }
 
 
