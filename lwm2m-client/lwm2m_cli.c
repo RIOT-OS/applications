@@ -7,11 +7,11 @@
  */
 
 /**
- * @defgroup     app_lwm2m_client
+ * @defgroup     app_lwm2m_cli
  * @{
  *
  * @file
- * @brief       RIOT native LwM2M client
+ * @brief       CLI for RIOT native LwM2M client
  *
  * @author      Ken Bannister <kb2ma@runbox.com>
  * @}
@@ -20,12 +20,16 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "errno.h"
 #include "msg.h"
 #include "shell.h"
+#include "thread.h"
+#include "lwm2m_cli.h"
 #include "lwm2m_client.h"
 
-#define SHELL_QUEUE_SIZE (4)
-static msg_t _shell_queue[SHELL_QUEUE_SIZE];
+static char _stack[THREAD_STACKSIZE_DEFAULT];
+static kernel_pid_t _pid = KERNEL_PID_UNDEF;
+static kernel_pid_t _lwm2m_pid = KERNEL_PID_UNDEF;
 
 
 static int _cli_cmd(int argc, char **argv)
@@ -35,8 +39,11 @@ static int _cli_cmd(int argc, char **argv)
     }
 
     if (!strcmp(argv[1], "start")) {
-        int ret = lwm2m_client_start();
-        if (ret < 0) {
+        int ret = -1;
+        if (lwm2m_client_state() == LWM2M_STATE_INIT) {
+            ret = thread_wakeup(_lwm2m_pid);
+        }
+        if (ret != 1) {
             printf("Failed to start: %d\n", ret);
         }
         return 0;
@@ -57,11 +64,27 @@ static const shell_command_t my_commands[] = {
     { NULL, NULL, NULL }
 };
 
-int main(void)
+static void *_run_shell(void *arg)
 {
-    msg_init_queue(_shell_queue, SHELL_QUEUE_SIZE);
-    char line_buf[SHELL_DEFAULT_BUFSIZE];
-    shell_run(my_commands, line_buf, SHELL_DEFAULT_BUFSIZE);
+    (void)arg;
 
+    char line_buf[SHELL_DEFAULT_BUFSIZE];
+    /* loops forever */
+    shell_run_once(my_commands, line_buf, SHELL_DEFAULT_BUFSIZE);
+
+    _pid = KERNEL_PID_UNDEF;
+    return 0;
+}
+
+int lwm2m_cli_start(kernel_pid_t lwm2m_pid)
+{
+    if (_pid != KERNEL_PID_UNDEF) {
+        return -EALREADY;
+    }
+    _lwm2m_pid = lwm2m_pid;
+
+    _pid = thread_create(_stack, sizeof(_stack),
+                         THREAD_PRIORITY_MAIN+1, THREAD_CREATE_STACKTEST,
+                         _run_shell, NULL, "shell");
     return 0;
 }

@@ -13,6 +13,8 @@
  * @file
  * @brief       LwM2M client
  *
+ * Start the app via the 'lwm2m start' command from the CLI.
+ *
  * @author      Ken Bannister <kb2ma@runbox.com>
  */
 
@@ -32,28 +34,20 @@ extern "C" {
  * @name    States for the client
  * @{
  */
-#define LWM2M_STATE_INIT      (0)     /**< Not initialized yet */
-#define LWM2M_STATE_REG_SENT  (1)     /**< Sent initial registration */
-#define LWM2M_STATE_REG_FAIL  (2)
-#define LWM2M_STATE_REG_OK    (3)
+#define LWM2M_STATE_INIT        (0)     /**< Initialized */
+#define LWM2M_STATE_REG_SENT    (1)     /**< Sent initial registration */
+#define LWM2M_STATE_REG_FAIL    (2)     /**< Registration failed */
+#define LWM2M_STATE_REG_OK      (3)     /**< Registration succeeded */
+#define LWM2M_STATE_REG_RENEW   (4)     /**< Re-registration required */
+#define LWM2M_STATE_INIT_FAIL  (-1)     /**< Initialization failed */
 /** @} */
 
 /**
- * @brief Registers with server.
- *
- * @return 0 on success
- * @return -EALREADY if already started
- * @return -ECOMM if message send failed
- * @return -LWM2M_ERROR if some other error occurred
- */
-int lwm2m_client_start(void);
-
-/**
- * Provides the current state of the client, and LWM2M_STATE... macro value
+ * @brief Provides the current state of the client.
  *
  * Useful for testing.
  *
- * @return state
+ * @return state LWM2M_STATE... macro value
  */
 int lwm2m_client_state(void);
 
