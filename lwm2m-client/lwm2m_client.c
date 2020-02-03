@@ -21,9 +21,11 @@
 #include "debug.h"
 
 #include "net/gcoap.h"
+#include "fmt.h"
 #include "lwm2m_cli.h"
 #include "lwm2m_client.h"
 #include "thread.h"
+#include "timex.h"
 /*
 #include "saul_reg.h"
 #include "saul_reader.h"
@@ -34,9 +36,13 @@
 static ssize_t _temp_req_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len,
                                  void *ctx);
 
+/*
+ * Client internal variables
+ */
 typedef struct {
-    int state;
-    sock_udp_ep_t server;
+    int state;                    /* current state, a LWM2M_STATE_* macro */
+    uint32_t next_reg_time;       /* time for next registration, in seconds */
+    sock_udp_ep_t server;         /* device management server endpoint */
 } lwm2m_client_t;
 
 static lwm2m_client_t _client;
@@ -66,6 +72,11 @@ static void _reg_handler(const gcoap_request_memo_t *memo, coap_pkt_t* pdu,
         _client.state = LWM2M_STATE_REG_FAIL;
         return;
     }
+
+    timex_t time;
+    xtimer_now_timex(&time);
+    /* re-registration interval less confirmable msg lifetime */
+    _client.next_reg_time = time.seconds + (LWM2M_REG_INTERVAL - 90);
     _client.state = LWM2M_STATE_REG_OK;
 }
 
@@ -196,16 +207,24 @@ void _register(void)
 
     if (_client.state == LWM2M_STATE_REG_RENEW) {
         DEBUG("lwm2m: renewal not implemented\n");
+        timex_t time;
+        xtimer_now_timex(&time);
+        /* re-registration interval less confirmable msg lifetime */
+        _client.next_reg_time = time.seconds + (LWM2M_REG_INTERVAL - 90);
         _client.state = LWM2M_STATE_REG_OK;
         return;
     }
 
+    char interval[8];
+    memset(interval, 0, 8);
+    fmt_u32_dec(interval, LWM2M_REG_INTERVAL);
+    
     gcoap_req_init(&pdu, buf, CONFIG_GCOAP_PDU_BUF_SIZE, COAP_METHOD_POST, "/rd");
     coap_hdr_set_type(pdu.hdr, COAP_TYPE_CON);
     coap_opt_add_format(&pdu, COAP_FORMAT_LINK);
     gcoap_add_qstring(&pdu, "lwm2m", "1.0");
     gcoap_add_qstring(&pdu, "ep", "RIOTclient");
-    gcoap_add_qstring(&pdu, "lt", "300");
+    gcoap_add_qstring(&pdu, "lt", interval);
     int len = coap_opt_finish(&pdu, COAP_OPT_FINISH_PAYLOAD);
     if (len + strlen(_REG_PAYLOAD) < CONFIG_GCOAP_PDU_BUF_SIZE) {
         memcpy(pdu.payload, _REG_PAYLOAD, strlen(_REG_PAYLOAD));
@@ -225,6 +244,8 @@ void _register(void)
 
 int main(void)
 {
+    timex_t time;
+
     _client.state = LWM2M_STATE_INIT;
     gcoap_register_listener(&_listener);
     lwm2m_cli_start(thread_getpid());
@@ -237,7 +258,8 @@ int main(void)
     /* saul_reader_start(SAUL_DRIVER, NULL); */
 
     while (1) {
-        DEBUG("lwm2m: state %d\n", _client.state);
+        xtimer_now_timex(&time);
+        DEBUG("lwm2m: state %d @ %u\n", _client.state, time.seconds);
 
         switch (_client.state) {
         case LWM2M_STATE_INIT:
@@ -245,12 +267,12 @@ int main(void)
             _register();
             break;
         case LWM2M_STATE_REG_OK:
-            /* re-registration interval less confirmable msg lifetime */
-            xtimer_sleep(210);
+            DEBUG("lwm2m: sleeping for %u\n", _client.next_reg_time - time.seconds);
+            xtimer_sleep(_client.next_reg_time - time.seconds);
             _client.state = LWM2M_STATE_REG_RENEW;
             break;
         default:
-            /* expecting an event, or a terminal error */
+            /* expecting an event, or has a terminal error */
             xtimer_sleep(1);
         }
     }

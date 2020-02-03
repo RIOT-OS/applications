@@ -43,6 +43,11 @@ extern "C" {
 /** @} */
 
 /**
+ * @brief  Registration interval for device management server, in seconds
+ */
+#define LWM2M_REG_INTERVAL   (300U)
+
+/**
  * @brief Provides the current state of the client.
  *
  * Useful for testing.
