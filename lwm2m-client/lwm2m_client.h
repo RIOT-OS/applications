@@ -43,9 +43,18 @@ extern "C" {
 /** @} */
 
 /**
- * @brief  Registration interval for device management server, in seconds
+ * @brief Registration interval for device management server, in seconds
  */
+#ifndef LWM2M_REG_INTERVAL
 #define LWM2M_REG_INTERVAL   (300U)
+#endif
+
+/**
+ * @brief Maximum length of location URI for registration server
+ */
+#ifndef LWM2M_REG_LOCATION_MAXLEN
+#define LWM2M_REG_LOCATION_MAXLEN (32U)
+#endif
 
 /**
  * @brief Provides the current state of the client.

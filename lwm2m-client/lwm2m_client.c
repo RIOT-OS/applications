@@ -43,9 +43,15 @@ typedef struct {
     int state;                    /* current state, a LWM2M_STATE_* macro */
     uint32_t next_reg_time;       /* time for next registration, in seconds */
     sock_udp_ep_t server;         /* device management server endpoint */
+    char server_location[LWM2M_REG_LOCATION_MAXLEN];
+                                  /* registration location provided by server,
+                                   * as a null terminated string */
 } lwm2m_client_t;
 
-static lwm2m_client_t _client;
+static lwm2m_client_t _client = {
+    .state = LWM2M_STATE_INIT,
+    .server_location = { '\0' }
+};
 
 /* CoAP resources. Must be sorted by path (ASCII order). */
 static const coap_resource_t _resources[] = {
@@ -71,6 +77,20 @@ static void _reg_handler(const gcoap_request_memo_t *memo, coap_pkt_t* pdu,
         DEBUG("lwm2m: registration failed: %d\n", memo->state);
         _client.state = LWM2M_STATE_REG_FAIL;
         return;
+    }
+
+    /* record initial registration location */
+    if (!strlen(_client.server_location)) {
+        ssize_t len = coap_get_location_path(pdu, (uint8_t*)_client.server_location,
+                                             LWM2M_REG_LOCATION_MAXLEN);
+        if (len == -ENOSPC) {
+            DEBUG("lwmwm: location path too long\n");
+            _client.state = LWM2M_STATE_REG_FAIL;
+            return;
+        }
+        else {
+            DEBUG("lwm2m: reg location %s\n", _client.server_location);
+        }
     }
 
     timex_t time;
@@ -204,35 +224,36 @@ void _register(void)
 {
     coap_pkt_t pdu;
     uint8_t buf[CONFIG_GCOAP_PDU_BUF_SIZE];
+    int len;
 
     if (_client.state == LWM2M_STATE_REG_RENEW) {
-        DEBUG("lwm2m: renewal not implemented\n");
-        timex_t time;
-        xtimer_now_timex(&time);
-        /* re-registration interval less confirmable msg lifetime */
-        _client.next_reg_time = time.seconds + (LWM2M_REG_INTERVAL - 90);
-        _client.state = LWM2M_STATE_REG_OK;
-        return;
-    }
-
-    char interval[8];
-    memset(interval, 0, 8);
-    fmt_u32_dec(interval, LWM2M_REG_INTERVAL);
-    
-    gcoap_req_init(&pdu, buf, CONFIG_GCOAP_PDU_BUF_SIZE, COAP_METHOD_POST, "/rd");
-    coap_hdr_set_type(pdu.hdr, COAP_TYPE_CON);
-    coap_opt_add_format(&pdu, COAP_FORMAT_LINK);
-    gcoap_add_qstring(&pdu, "lwm2m", "1.0");
-    gcoap_add_qstring(&pdu, "ep", "RIOTclient");
-    gcoap_add_qstring(&pdu, "lt", interval);
-    int len = coap_opt_finish(&pdu, COAP_OPT_FINISH_PAYLOAD);
-    if (len + strlen(_REG_PAYLOAD) < CONFIG_GCOAP_PDU_BUF_SIZE) {
-        memcpy(pdu.payload, _REG_PAYLOAD, strlen(_REG_PAYLOAD));
-        len += strlen(_REG_PAYLOAD);
+        gcoap_req_init(&pdu, buf, CONFIG_GCOAP_PDU_BUF_SIZE, COAP_METHOD_POST,
+                      &_client.server_location[0]);
+        coap_hdr_set_type(pdu.hdr, COAP_TYPE_CON);
+        len = coap_opt_finish(&pdu, COAP_OPT_FINISH_NONE);
     }
     else {
-        _client.state = LWM2M_STATE_REG_FAIL;
-        return;
+        /* initial registration */
+        char interval[8];
+        memset(interval, 0, 8);
+        fmt_u32_dec(interval, LWM2M_REG_INTERVAL);
+        
+        gcoap_req_init(&pdu, buf, CONFIG_GCOAP_PDU_BUF_SIZE, COAP_METHOD_POST,
+                      "/rd");
+        coap_hdr_set_type(pdu.hdr, COAP_TYPE_CON);
+        coap_opt_add_format(&pdu, COAP_FORMAT_LINK);
+        gcoap_add_qstring(&pdu, "lwm2m", "1.0");
+        gcoap_add_qstring(&pdu, "ep", "RIOTclient");
+        gcoap_add_qstring(&pdu, "lt", interval);
+        len = coap_opt_finish(&pdu, COAP_OPT_FINISH_PAYLOAD);
+        if (len + strlen(_REG_PAYLOAD) < CONFIG_GCOAP_PDU_BUF_SIZE) {
+            memcpy(pdu.payload, _REG_PAYLOAD, strlen(_REG_PAYLOAD));
+            len += strlen(_REG_PAYLOAD);
+        }
+        else {
+            _client.state = LWM2M_STATE_REG_FAIL;
+            return;
+        }
     }
 
     if (!gcoap_req_send(buf, len, &_client.server, _reg_handler, NULL)) {
@@ -246,7 +267,6 @@ int main(void)
 {
     timex_t time;
 
-    _client.state = LWM2M_STATE_INIT;
     gcoap_register_listener(&_listener);
     lwm2m_cli_start(thread_getpid());
     /* wait for startup from CLI */
@@ -259,7 +279,7 @@ int main(void)
 
     while (1) {
         xtimer_now_timex(&time);
-        DEBUG("lwm2m: state %d @ %u\n", _client.state, time.seconds);
+        DEBUG("lwm2m: state %d @ %u\n", _client.state, (unsigned)time.seconds);
 
         switch (_client.state) {
         case LWM2M_STATE_INIT:
@@ -267,7 +287,8 @@ int main(void)
             _register();
             break;
         case LWM2M_STATE_REG_OK:
-            DEBUG("lwm2m: sleeping for %u\n", _client.next_reg_time - time.seconds);
+            DEBUG("lwm2m: sleeping for %u\n",
+                  (unsigned) (_client.next_reg_time - time.seconds));
             xtimer_sleep(_client.next_reg_time - time.seconds);
             _client.state = LWM2M_STATE_REG_RENEW;
             break;
