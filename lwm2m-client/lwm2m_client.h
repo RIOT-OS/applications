@@ -11,9 +11,13 @@
  * @{
  *
  * @file
- * @brief       LwM2M client
+ * @brief       RIOT native LwM2M client
  *
- * Start the app via the 'lwm2m start' command from the CLI.
+ * Main entry point for the LwM2M client application.
+ * 
+ * Start the app via the 'lwm2m start' command from the CLI. The client will
+ * register with the device management server automatically. The client then
+ * will re-register with the server within LWM2M_REG_INTERVAL.
  *
  * @author      Ken Bannister <kb2ma@runbox.com>
  */
@@ -26,31 +30,26 @@ extern "C" {
 #endif
 
 /**
- * @brief Generic error not described more specifically
- */
-#define LWM2M_ERROR (256)
-
-/**
  * @name    States for the client
  * @{
  */
 #define LWM2M_STATE_INIT        (0)     /**< Initialized */
 #define LWM2M_STATE_REG_SENT    (1)     /**< Sent initial registration */
-#define LWM2M_STATE_REG_FAIL    (2)     /**< Registration failed */
-#define LWM2M_STATE_REG_OK      (3)     /**< Registration succeeded */
-#define LWM2M_STATE_REG_RENEW   (4)     /**< Re-registration required */
+#define LWM2M_STATE_REG_OK      (2)     /**< Registration succeeded */
+#define LWM2M_STATE_REG_RENEW   (3)     /**< Re-registration required */
 #define LWM2M_STATE_INIT_FAIL  (-1)     /**< Initialization failed */
+#define LWM2M_STATE_REG_FAIL   (-2)     /**< Registration failed */
 /** @} */
 
 /**
- * @brief Registration interval for device management server, in seconds
+ * @brief Re-registration interval for device management server, in seconds
  */
 #ifndef LWM2M_REG_INTERVAL
 #define LWM2M_REG_INTERVAL   (300U)
 #endif
 
 /**
- * @brief Maximum length of location URI for registration server
+ * @brief Maximum length of location URI for registration interface
  */
 #ifndef LWM2M_REG_LOCATION_MAXLEN
 #define LWM2M_REG_LOCATION_MAXLEN (32U)
@@ -61,7 +60,7 @@ extern "C" {
  *
  * Useful for testing.
  *
- * @return state LWM2M_STATE... macro value
+ * @return LWM2M_STATE... macro value
  */
 int lwm2m_client_state(void);
 

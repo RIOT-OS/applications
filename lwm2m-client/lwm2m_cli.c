@@ -7,7 +7,7 @@
  */
 
 /**
- * @defgroup     app_lwm2m_cli
+ * @ingroup     app_lwm2m_client
  * @{
  *
  * @file
@@ -27,6 +27,8 @@
 #include "lwm2m_cli.h"
 #include "lwm2m_client.h"
 
+#define SHELL_QUEUE_SIZE (4)
+static msg_t _msg_queue[SHELL_QUEUE_SIZE];
 static char _stack[THREAD_STACKSIZE_DEFAULT];
 static kernel_pid_t _pid = KERNEL_PID_UNDEF;
 static kernel_pid_t _lwm2m_pid = KERNEL_PID_UNDEF;
@@ -68,6 +70,7 @@ static void *_run_shell(void *arg)
 {
     (void)arg;
 
+    msg_init_queue(_msg_queue, SHELL_QUEUE_SIZE);
     char line_buf[SHELL_DEFAULT_BUFSIZE];
     /* loops forever */
     shell_run_once(my_commands, line_buf, SHELL_DEFAULT_BUFSIZE);

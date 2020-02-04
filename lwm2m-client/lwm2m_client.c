@@ -7,8 +7,8 @@
  */
 
 /**
+ * @ingroup     app_lwm2m_client
  * @{
- * @ingroup     lwm2m_client
  *
  * @file
  * @brief       RIOT native LwM2M client
@@ -17,7 +17,7 @@
  * @}
  */
 
-#define ENABLE_DEBUG    (1)
+#define ENABLE_DEBUG    (0)
 #include "debug.h"
 
 #include "net/gcoap.h"
@@ -26,10 +26,6 @@
 #include "lwm2m_client.h"
 #include "thread.h"
 #include "timex.h"
-/*
-#include "saul_reg.h"
-#include "saul_reader.h"
-*/
 
 #define _REG_PAYLOAD  "</>;rt=\"oma.lwm2m\",</1/0>,</3/0>,</3303/0>"
 
@@ -42,7 +38,7 @@ static ssize_t _temp_req_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len,
 typedef struct {
     int state;                    /* current state, a LWM2M_STATE_* macro */
     uint32_t next_reg_time;       /* time for next registration, in seconds */
-    sock_udp_ep_t server;         /* device management server endpoint */
+    sock_udp_ep_t_ep server;      /* device management server endpoint */
     char server_location[LWM2M_REG_LOCATION_MAXLEN];
                                   /* registration location provided by server,
                                    * as a null terminated string */
@@ -65,7 +61,7 @@ static gcoap_listener_t _listener = {
 };
 
 /*
- * Registration callback.
+ * Registration response callback
  */
 static void _reg_handler(const gcoap_request_memo_t *memo, coap_pkt_t* pdu,
                          const sock_udp_ep_t *remote)
@@ -101,7 +97,7 @@ static void _reg_handler(const gcoap_request_memo_t *memo, coap_pkt_t* pdu,
 }
 
 /*
- * Temperature request (/3303) callback.
+ * Temperature (/3303) request callback
  */
 static ssize_t _temp_req_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len,
                                  void *ctx)
@@ -114,7 +110,7 @@ static ssize_t _temp_req_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len,
 
     /* verify request is for /3303/0/5700 */
     ssize_t optlen;
-    while ((optlen = coap_opt_get_next(pdu, &opt, &opt_val, !opt.opt_num)) > 0) {
+    while ((optlen = coap_opt_get_next(pdu, &opt, &opt_val, !opt.opt_num)) >= 0) {
         if (opt.opt_num == COAP_OPT_URI_PATH) {
             if (path_i == 2 && optlen == 4 && !strncmp((char *)opt_val, "5700", 4)) {
                 is_value_req = true;
@@ -146,24 +142,6 @@ static ssize_t _temp_req_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len,
     }
 }
 
-/*
-static void _saul_handler(float value)
-{
-    coap_pkt_t pdu;
-    char buf[40];
-    if (gcoap_obs_init(&pdu, buf, 40, _resources[0]) == GCOAP_OBS_INIT_OK) {
-        coap_opt_add_format(&pdu, COAP_FORMAT_TEXT);
-        size_t len = coap_opt_finish(&pdu, COAP_OPT_FINISH_PAYLOAD);
-
-        if (pdu.payload_len >= strlen(10)) {
-            saul_reader_print_float(value, pdu.payload, 10);
-            len += strlen(temp_val);
-            gcoap_obs_send(buf, len, _resources[0]);
-        }
-    }
-}
-*/
-
 int lwm2m_client_state(void)
 {
     return _client.state;
@@ -177,17 +155,17 @@ int lwm2m_client_state(void)
  */
 static int _init_server_addr(void)
 {
-    _client.server.family = AF_INET6;
+    _client.server_ep.family = AF_INET6;
 
     /* parse for interface specifier, like %1 */
     char *iface = ipv6_addr_split_iface(LWM2M_SERVER_ADDR);
     if (!iface) {
         if (gnrc_netif_numof() == 1) {
             /* assign the single interface found in gnrc_netif_numof() */
-            _client.server.netif = (uint16_t)gnrc_netif_iter(NULL)->pid;
+            _client.server_ep.netif = (uint16_t)gnrc_netif_iter(NULL)->pid;
         }
         else {
-            _client.server.netif = SOCK_ADDR_ANY_NETIF;
+            _client.server_ep.netif = SOCK_ADDR_ANY_NETIF;
         }
     }
     else {
@@ -196,7 +174,7 @@ static int _init_server_addr(void)
             DEBUG("lwm2m: interface not valid\n");
             return -1;
         }
-        _client.server.netif = pid;
+        _client.server_ep.netif = pid;
     }
 
     /* build address */
@@ -205,14 +183,14 @@ static int _init_server_addr(void)
         DEBUG("lwm2m: unable to parse destination address\n");
         return -1;
     }
-    if ((_client.server.netif == SOCK_ADDR_ANY_NETIF)
+    if ((_client.server_ep.netif == SOCK_ADDR_ANY_NETIF)
             && ipv6_addr_is_link_local(&addr)) {
         DEBUG("lwm2m: must specify interface for link local target\n");
         return -1;
     }
-    memcpy(&_client.server.addr.ipv6[0], &addr.u8[0], sizeof(addr.u8));
+    memcpy(&_client.server_ep.addr.ipv6[0], &addr.u8[0], sizeof(addr.u8));
 
-    _client.server.port = CONFIG_GCOAP_PORT;
+    _client.server_ep.port = GCOAP_PORT;
 
     return 0;
 }
@@ -220,14 +198,14 @@ static int _init_server_addr(void)
 /*
  * Register with LwM2M device management server.
  */
-void _register(void)
+static void _register(void)
 {
     coap_pkt_t pdu;
-    uint8_t buf[CONFIG_GCOAP_PDU_BUF_SIZE];
+    uint8_t buf[GCOAP_PDU_BUF_SIZE];
     int len;
 
     if (_client.state == LWM2M_STATE_REG_RENEW) {
-        gcoap_req_init(&pdu, buf, CONFIG_GCOAP_PDU_BUF_SIZE, COAP_METHOD_POST,
+        gcoap_req_init(&pdu, buf, GCOAP_PDU_BUF_SIZE, COAP_METHOD_POST,
                       &_client.server_location[0]);
         coap_hdr_set_type(pdu.hdr, COAP_TYPE_CON);
         len = coap_opt_finish(&pdu, COAP_OPT_FINISH_NONE);
@@ -238,7 +216,7 @@ void _register(void)
         memset(interval, 0, 8);
         fmt_u32_dec(interval, LWM2M_REG_INTERVAL);
         
-        gcoap_req_init(&pdu, buf, CONFIG_GCOAP_PDU_BUF_SIZE, COAP_METHOD_POST,
+        gcoap_req_init(&pdu, buf, GCOAP_PDU_BUF_SIZE, COAP_METHOD_POST,
                       "/rd");
         coap_hdr_set_type(pdu.hdr, COAP_TYPE_CON);
         coap_opt_add_format(&pdu, COAP_FORMAT_LINK);
@@ -246,7 +224,7 @@ void _register(void)
         gcoap_add_qstring(&pdu, "ep", "RIOTclient");
         gcoap_add_qstring(&pdu, "lt", interval);
         len = coap_opt_finish(&pdu, COAP_OPT_FINISH_PAYLOAD);
-        if (len + strlen(_REG_PAYLOAD) < CONFIG_GCOAP_PDU_BUF_SIZE) {
+        if (len + strlen(_REG_PAYLOAD) < GCOAP_PDU_BUF_SIZE) {
             memcpy(pdu.payload, _REG_PAYLOAD, strlen(_REG_PAYLOAD));
             len += strlen(_REG_PAYLOAD);
         }
@@ -256,26 +234,29 @@ void _register(void)
         }
     }
 
-    if (!gcoap_req_send(buf, len, &_client.server, _reg_handler, NULL)) {
+    if (!gcoap_req_send(buf, len, &_client.server_ep, _reg_handler, NULL)) {
         _client.state = LWM2M_STATE_REG_FAIL;
         return;
     }
     _client.state = LWM2M_STATE_REG_SENT;
 }
 
+/*
+ * Initialize and maintain application state loop.
+ */
 int main(void)
 {
     timex_t time;
 
     gcoap_register_listener(&_listener);
     lwm2m_cli_start(thread_getpid());
-    /* wait for startup from CLI */
+
+    DEBUG("lwm2m: waiting for start from CLI\n");
     thread_sleep();
 
     if (_init_server_addr() < 0) {
         _client.state = LWM2M_STATE_INIT_FAIL;
     }
-    /* saul_reader_start(SAUL_DRIVER, NULL); */
 
     while (1) {
         xtimer_now_timex(&time);

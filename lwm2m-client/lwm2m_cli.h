@@ -7,7 +7,7 @@
  */
 
 /**
- * @ingroup     app_lwm2m_cli
+ * @ingroup     app_lwm2m_client
  * @{
  *
  * @file
@@ -26,12 +26,14 @@ extern "C" {
 #endif
 
 /**
- * Starts the CLI thread.
+ * @brief Starts the CLI thread.
+ *
+ * Runs at a lower priority than the main LwM2M thread.
  *
  * @param lwm2m_pid PID for the main LwM2M thread
  *
  * @return 0 if thread started OK
- * @return -EALREADY if thread already started
+ * @return -EALREADY if CLI thread already started
  */
 int lwm2m_cli_start(kernel_pid_t lwm2m_pid);
 
