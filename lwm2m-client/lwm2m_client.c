@@ -24,6 +24,8 @@
 #include "fmt.h"
 #include "lwm2m_cli.h"
 #include "lwm2m_client.h"
+#include "phydat.h"
+#include "saul_info_reporter.h"
 #include "thread.h"
 #include "timex.h"
 
@@ -38,7 +40,9 @@ static ssize_t _temp_req_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len,
 typedef struct {
     int state;                    /* current state, a LWM2M_STATE_* macro */
     uint32_t next_reg_time;       /* time for next registration, in seconds */
-    sock_udp_ep_t_ep server;      /* device management server endpoint */
+    uint32_t next_info_time;      /* time for next SAUL information report,
+                                   * in seconds */
+    sock_udp_ep_t server_ep;      /* device management server endpoint */
     char server_location[LWM2M_REG_LOCATION_MAXLEN];
                                   /* registration location provided by server,
                                    * as a null terminated string */
@@ -46,6 +50,8 @@ typedef struct {
 
 static lwm2m_client_t _client = {
     .state = LWM2M_STATE_INIT,
+    .next_reg_time = 0,
+    .next_info_time = 0,
     .server_location = { '\0' }
 };
 
@@ -122,14 +128,23 @@ static ssize_t _temp_req_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len,
 
     /* write response */
     if (is_value_req) {
-        char *temp_val = "1.0";
         gcoap_resp_init(pdu, buf, len, COAP_CODE_CONTENT);
         coap_opt_add_format(pdu, COAP_FORMAT_TEXT);
         size_t resp_len = coap_opt_finish(pdu, COAP_OPT_FINISH_PAYLOAD);
 
-        if (pdu->payload_len >= strlen(temp_val)) {
-            memcpy(pdu->payload, temp_val, strlen(temp_val));
-            return resp_len + strlen(temp_val);
+        if (pdu->payload_len >= 10) {
+            phydat_t temp_dat;
+            saul_info_value(&temp_dat);
+            ssize_t len = saul_info_print(temp_dat.val[0], temp_dat.scale,
+                                          (char *)pdu->payload, 10);
+            if (len > 0) {
+                resp_len += len;
+            }
+            else {
+                DEBUG("lwm2m: buffer too small\n");
+                return -1;
+            }
+            return resp_len;
         }
         else {
             DEBUG("lwm2m: msg buffer too small\n");
@@ -267,12 +282,34 @@ int main(void)
         case LWM2M_STATE_REG_RENEW:
             _register();
             break;
-        case LWM2M_STATE_REG_OK:
-            DEBUG("lwm2m: sleeping for %u\n",
-                  (unsigned) (_client.next_reg_time - time.seconds));
-            xtimer_sleep(_client.next_reg_time - time.seconds);
-            _client.state = LWM2M_STATE_REG_RENEW;
+
+        case LWM2M_STATE_INFO_RENEW:
+            saul_info_send();
+            /* assume we don't wait for confirmation */
+            _client.next_info_time = time.seconds + SAUL_INFO_INTERVAL;
+            _client.state = LWM2M_STATE_INFO_OK;
             break;
+
+        case LWM2M_STATE_REG_OK:
+        case LWM2M_STATE_INFO_OK:
+            if (_client.next_info_time == 0) {
+                saul_info_init(SAUL_INFO_DRIVER, &_resources[0]);
+                _client.next_info_time = time.seconds + SAUL_INFO_INTERVAL;
+            }
+            if (_client.next_info_time < _client.next_reg_time) {
+                DEBUG("lwm2m: sleeping for %u\n",
+                      (unsigned) (_client.next_info_time - time.seconds));
+                xtimer_sleep(_client.next_info_time - time.seconds);
+                _client.state = LWM2M_STATE_INFO_RENEW;
+            }
+            else {
+                DEBUG("lwm2m: sleeping for %u\n",
+                      (unsigned) (_client.next_reg_time - time.seconds));
+                xtimer_sleep(_client.next_reg_time - time.seconds);
+                _client.state = LWM2M_STATE_REG_RENEW;
+            }
+            break;
+
         default:
             /* expecting an event, or has a terminal error */
             xtimer_sleep(1);

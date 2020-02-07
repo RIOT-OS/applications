@@ -19,6 +19,9 @@
  * register with the device management server automatically. The client then
  * will re-register with the server within LWM2M_REG_INTERVAL.
  *
+ * Handles a read or observe request to /3303/0/5700 for the temerature value.
+ * Notifies the observer on SAUL_INFO_INTERVAL.
+ *
  * @author      Ken Bannister <kb2ma@runbox.com>
  */
 
@@ -37,6 +40,8 @@ extern "C" {
 #define LWM2M_STATE_REG_SENT    (1)     /**< Sent initial registration */
 #define LWM2M_STATE_REG_OK      (2)     /**< Registration succeeded */
 #define LWM2M_STATE_REG_RENEW   (3)     /**< Re-registration required */
+#define LWM2M_STATE_INFO_OK     (4)     /**< SAUL info report succeeded */
+#define LWM2M_STATE_INFO_RENEW  (5)     /**< SAUL info report required */
 #define LWM2M_STATE_INIT_FAIL  (-1)     /**< Initialization failed */
 #define LWM2M_STATE_REG_FAIL   (-2)     /**< Registration failed */
 /** @} */
