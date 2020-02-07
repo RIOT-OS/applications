@@ -22,6 +22,10 @@ USEMODULE += gcoap
 USEMODULE += shell
 USEMODULE += shell_commands
 USEMODULE += ps
+# Include and auto-initialize all available sensors
+ifneq (native,$(BOARD))
+  USEMODULE += saul_default
+endif
 
 # Comment this out to disable code in RIOT that does safety checking
 # which is not needed in a production environment but helps in the
@@ -36,5 +40,14 @@ ifneq (,$(SERVER_ADDR))
 endif
 
 CFLAGS += -DTHREAD_PRIORITY_MAIN=10
+
+# SAUL driver that measures temperature; hardware dependent
+SAUL_DRIVER ?= jc42
+ifneq (native,$(BOARD))
+  USEMODULE += $(SAUL_DRIVER)
+  CFLAGS += -DSAUL_INFO_DRIVER='"$(SAUL_DRIVER)"'
+else
+  CFLAGS += -DSAUL_INFO_DRIVER=NULL
+endif
 
 include $(RIOTBASE)/Makefile.include
