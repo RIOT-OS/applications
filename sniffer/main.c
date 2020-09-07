@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-18 Freie Universität Berlin
+ * Copyright (C) 2015-19 Freie Universität Berlin
  *
  * This file is subject to the terms and conditions of the GNU Lesser
  * General Public License v2.1. See the file LICENSE in the top level
@@ -22,17 +22,13 @@
 
 #include <stdio.h>
 
-#include "fmt.h"
-#include "thread.h"
-#include "xtimer.h"
-#include "shell.h"
-#include "shell_commands.h"
+#include "byteorder.h"
+#include "isrpipe.h"
 #include "net/gnrc.h"
-
-/**
- * @brief   Buffer size used by the shell
- */
-#define SHELL_BUFSIZE           (64U)
+#include "net/netopt.h"
+#include "periph/uart.h"
+#include "stdio_uart.h"
+#include "xtimer.h"
 
 /**
  * @brief   Priority of the RAW dump thread
@@ -44,18 +40,70 @@
  */
 #define RAWDUMP_MSG_Q_SIZE      (32U)
 
-/**
- * @brief   Stack for the raw dump thread
- */
-static char rawdmp_stack[THREAD_STACKSIZE_SMALL];
+#define SET_CHAN_MSG_TYPE       (0xdd4a)
+
+#define END_BYTE                (0xc0U)
+#define ESC_BYTE                (0xdbU)
+#define END_ESC_BYTE            (0xdcU)
+#define ESC_ESC_BYTE            (0xddU)
+
+#ifndef SNIFFER_DEV
+#define SNIFFER_DEV             (UART_DEV(0))
+#endif
+
+#ifndef SNIFFER_BAUDRATE
+#define SNIFFER_BAUDRATE        (STDIO_UART_BAUDRATE)
+#endif
+
+static msg_t msg_q[RAWDUMP_MSG_Q_SIZE];
+static kernel_pid_t _main_pid = KERNEL_PID_UNDEF;
+
+static void _rx_uart(void *arg, uint8_t data)
+{
+    /* XXX: read one byte channel. More sync is required for larger channel
+     * ranges */
+    msg_t msg = { .type = SET_CHAN_MSG_TYPE, .content = { .value = data } };
+
+    (void)arg;
+    msg_send_int(&msg, _main_pid);
+}
+
+static void _tx_byte(uint8_t data)
+{
+    uart_write(SNIFFER_DEV, &data, sizeof(data));
+}
+
+static void _tx_bytes(uint8_t *data, size_t len)
+{
+    for (unsigned i = 0; i < len; i++) {
+        switch (*data) {
+            case END_BYTE:
+                _tx_byte(ESC_BYTE);
+                _tx_byte(END_ESC_BYTE);
+                break;
+            case ESC_BYTE:
+                _tx_byte(ESC_BYTE);
+                _tx_byte(ESC_ESC_BYTE);
+                break;
+            default:
+                _tx_byte(*data);
+                break;
+        }
+        data++;
+    }
+}
 
 /**
  * @brief   Make a raw dump of the given packet contents
  */
-void dump_pkt(gnrc_pktsnip_t *pkt)
+static void _dump_pkt(gnrc_pktsnip_t *pkt)
 {
+    network_uint64_t now_us = byteorder_htonll(xtimer_now_usec64());
     gnrc_pktsnip_t *snip = pkt;
+    network_uint32_t len;
     uint8_t lqi = 0;
+    uint8_t padding[3] = { 0, 0, 0 };
+
     if (pkt->next) {
         if (pkt->next->type == GNRC_NETTYPE_NETIF) {
             gnrc_netif_hdr_t *netif_hdr = pkt->next->data;
@@ -63,54 +111,57 @@ void dump_pkt(gnrc_pktsnip_t *pkt)
             pkt = gnrc_pktbuf_remove_snip(pkt, pkt->next);
         }
     }
-    uint64_t now_us = xtimer_usec_from_ticks64(xtimer_now64());
 
-    print_str("rftest-rx --- len ");
-    print_u32_hex((uint32_t)gnrc_pkt_len(pkt));
-    print_str(" lqi ");
-    print_byte_hex(lqi);
-    print_str(" rx_time ");
-    print_u64_hex(now_us);
-    print_str("\n");
+    len = byteorder_htonl((uint32_t)gnrc_pkt_len(pkt));
+    /*
+     * write packet "header" in network byte order:
+     *
+     *  0                   1                   2                   3
+     *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     * |                         packet length                         |
+     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     * |      LQI      |                    padding                    |
+     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     * |                                                               |
+     * +                       Timestamp (in us)                       +
+     * |                                                               |
+     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     */
+    _tx_bytes(len.u8, sizeof(len));
+    _tx_bytes(&lqi, sizeof(lqi));
+    _tx_bytes(padding, sizeof(padding));
+    _tx_bytes(now_us.u8, sizeof(now_us));
     while (snip) {
-        for (size_t i = 0; i < snip->size; i++) {
-            print_byte_hex(((uint8_t *)(snip->data))[i]);
-            print_str(" ");
-        }
+        _tx_bytes(snip->data, snip->size);
         snip = snip->next;
     }
-    print_str("\n\n");
+    _tx_byte(END_BYTE);
 
     gnrc_pktbuf_release(pkt);
 }
 
-/**
- * @brief   Event loop of the RAW dump thread
- *
- * @param[in] arg   unused parameter
- */
-void *rawdump(void *arg)
+static void _init_uart(void)
 {
-    msg_t msg_q[RAWDUMP_MSG_Q_SIZE];
+    int res;
 
-    (void)arg;
-    msg_init_queue(msg_q, RAWDUMP_MSG_Q_SIZE);
-    while (1) {
-        msg_t msg;
+    (void)res;  /* in case assert is not compiled in */
+    uart_init(SNIFFER_DEV, SNIFFER_BAUDRATE, _rx_uart, NULL);
+    assert(res == UART_OK);
+}
 
-        msg_receive(&msg);
-        switch (msg.type) {
-            case GNRC_NETAPI_MSG_TYPE_RCV:
-                dump_pkt((gnrc_pktsnip_t *)msg.content.ptr);
-                break;
-            default:
-                /* do nothing */
-                break;
-        }
-    }
+static void _init_netif(gnrc_netif_t *netif)
+{
+    int res;
+    netopt_enable_t enable = NETOPT_ENABLE;
 
-    /* never reached */
-    return NULL;
+    (void)res;  /* in case assert is not compiled in */
+    res = gnrc_netapi_set(netif->pid, NETOPT_RAWMODE, 0,
+                          &enable, sizeof(enable));
+    assert(res >= 0);
+    res = gnrc_netapi_set(netif->pid, NETOPT_PROMISCUOUSMODE, 0,
+                          &enable, sizeof(enable));
+    assert(res >= 0);
 }
 
 /**
@@ -118,21 +169,42 @@ void *rawdump(void *arg)
  */
 int main(void)
 {
+    gnrc_netif_t *netif = gnrc_netif_iter(NULL);
     gnrc_netreg_entry_t dump;
 
-    puts("RIOT sniffer application");
+    assert(netif != NULL);
+    _main_pid = sched_active_pid;
+    msg_init_queue(msg_q, RAWDUMP_MSG_Q_SIZE);
+    _init_uart();
 
-    /* start and register rawdump thread */
-    puts("Run the rawdump thread and register it");
-    dump.target.pid = thread_create(rawdmp_stack, sizeof(rawdmp_stack), RAWDUMP_PRIO,
-                                    THREAD_CREATE_STACKTEST, rawdump, NULL, "rawdump");
+    /* start and register main thread for dumping */
+    dump.target.pid = _main_pid;
     dump.demux_ctx = GNRC_NETREG_DEMUX_CTX_ALL;
     gnrc_netreg_register(GNRC_NETTYPE_UNDEF, &dump);
 
-    /* start the shell */
-    puts("All ok, starting the shell now");
-    char line_buf[SHELL_DEFAULT_BUFSIZE];
-    shell_run(NULL, line_buf, SHELL_DEFAULT_BUFSIZE);
+    _init_netif(netif);
+
+    /* write empty packet to signal start */
+    _tx_byte(END_BYTE);
+    while (1) {
+        msg_t msg;
+
+        msg_receive(&msg);
+        switch (msg.type) {
+            case GNRC_NETAPI_MSG_TYPE_RCV:
+                _dump_pkt((gnrc_pktsnip_t *)msg.content.ptr);
+                break;
+            case SET_CHAN_MSG_TYPE: {
+                uint8_t chan = msg.content.value;
+                gnrc_netapi_set(netif->pid, NETOPT_CHANNEL, 0, &chan,
+                                sizeof(chan));
+                break;
+            }
+            default:
+                /* do nothing */
+                break;
+        }
+    }
 
     return 0;
 }
