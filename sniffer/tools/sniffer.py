@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 '''
 (C) 2012, Mariano Alvira <mar@devl.org>
@@ -6,6 +6,7 @@
 (C) 2015, Hauke Petersen <hauke.petersen@fu-berlin.de>
 (C) 2015, Martine Lenders <mlenders@inf.fu-berlin.de>
 (C) 2015, Cenk Gündoğan <cnkgndgn@gmail.com>
+(C) 2019, Freie Universität Berlin (by Martine Lenders <m.lenders@fu-berlin.de)
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions
@@ -35,11 +36,15 @@ SUCH DAMAGE.
 from __future__ import print_function
 import argparse
 import sys
-import re
 import socket
 from time import sleep, time
-from struct import pack
+from struct import pack, unpack
 from serial import Serial
+
+END_BYTE = 0xc0
+ESC_BYTE = 0xdb
+END_ESC_BYTE = 0xdc
+ESC_ESC_BYTE = 0xdd
 
 # PCAP setup
 MAGIC = 0xa1b2c3d4
@@ -54,27 +59,46 @@ DEFAULT_BAUDRATE = 115200
 
 
 def configure_interface(port, channel):
-    line = ""
-    iface = 0
-    port.write(b'ifconfig\n')
-    while True:
-        line = port.readline()
-        if line == '':
-            print("Application has no network interface defined",
-                  file=sys.stderr)
-            sys.exit(2)
-        match = re.search(r'^Iface +(\d+)', line.decode(errors="ignore"))
-        if match is not None:
-            iface = int(match.group(1))
-            break
+    port.write(bytes([channel]))
 
-    # set channel, raw mode, and promiscuous mode
-    print('ifconfig %d set chan %d' % (iface, channel), file=sys.stderr)
-    print('ifconfig %d raw' % iface, file=sys.stderr)
-    print('ifconfig %d promisc' % iface, file=sys.stderr)
-    port.write(('ifconfig %d set chan %d\n' % (iface, channel)).encode())
-    port.write(('ifconfig %d raw\n' % iface).encode())
-    port.write(('ifconfig %d promisc\n' % iface).encode())
+
+class DecodeError(Exception):
+    pass
+
+
+def read_byte(port):
+    byte = port.read()
+    while not byte:
+        byte = port.read(1)
+    return byte[0]
+
+
+def decode(port, num=None):
+    byte = 0
+    res = bytearray()
+    while (byte != END_BYTE) and ((num is None) or (num > 0)):
+        byte = read_byte(port)
+        if byte == END_BYTE:
+            return bytes(res)
+        elif byte == ESC_BYTE:
+            byte = read_byte(port)
+            if byte == END_ESC_BYTE:
+                res.append(END_BYTE)
+            elif byte == ESC_ESC_BYTE:
+                res.append(ESC_BYTE)
+            else:
+                raise DecodeError("Unexpected byte \"{:02x}\" "
+                                  "after escape received".format(byte))
+        else:
+            res.append(byte)
+        if num is not None:
+            num -= 1
+    return bytes(res)
+
+
+def find_next_end(port):
+    while read_byte(port) != END_BYTE:
+        pass
 
 
 def generate_pcap(port, out):
@@ -84,29 +108,42 @@ def generate_pcap(port, out):
     out.write(pack('<LHHLLLL', MAGIC, MAJOR, MINOR, ZONE, SIG, SNAPLEN,
                    NETWORK))
     sys.stderr.write("RX: %i\r" % count)
+    # start after first END_BYTE
+    find_next_end(port)
     while True:
-        line = port.readline().rstrip()
+        try:
+            # read packet "header" in network byte order:
+            #
+            #  0                   1                   2                   3
+            #  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+            # +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            # |                         packet length                         |
+            # +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            # |      LQI      |                    padding                    |
+            # +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            # |                                                               |
+            # +                       Timestamp (in us)                       +
+            # |                                                               |
+            # +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            length, _, _ = unpack("!LB3xQ", decode(port, 16))
 
-        pkt_header = re.match(r">? *rftest-rx --- len (\w+).*",
-                              line.decode(errors="ignore"))
-        if pkt_header:
-            now = time()
-            sec = int(now)
-            usec = int((now - sec) * 1000000)
-            length = int(pkt_header.group(1), 16)
-            out.write(pack('<LLLL', sec, usec, length, length))
-            out.flush()
-            count += 1
-            sys.stderr.write("RX: %i\r" % count)
-            continue
+            if length:
+                now = time()
+                sec = int(now)
+                usec = int((now - sec) * 1000000)
+                out.write(pack('<LLLL', sec, usec, length, length))
+                out.flush()
+                count += 1
+                sys.stderr.write("RX: %i\r" % count)
+            else:
+                continue
 
-        pkt_data = re.match(r"(\w\w )+", line.decode(errors="ignore"))
-        if pkt_data:
-            for part in line.decode(errors="ignore").split(' '):
-                byte = re.match(r"(\w\w)", part)
-                if byte:
-                    out.write(pack('<B', int(byte.group(1), 16)))
+            # don't limit read by `length` in case the data is corrupted
+            out.write(decode(port))
             out.flush()
+        except DecodeError as exc:
+            sys.stderr.write(exc + "\r")
+            find_next_end(port)
 
 
 def connect(args):
