@@ -1,3 +1,15 @@
+# Archival notice
+
+The applications that resided in this repository have been [moved into RIOT].
+Please see the [examples inside RIOT] to find both these and other applications.
+
+The repository is left online only for documentation of the applications' history.
+
+[moved into RIOT]: https://github.com/RIOT-OS/RIOT/pull/18602
+[examples inside RIOT]: https://github.com/RIOT-OS/RIOT/tree/master/examples
+
+---
+
 [![Build Status](https://travis-ci.org/RIOT-OS/applications.svg?branch=master)](https://travis-ci.org/RIOT-OS/applications)
 
 # RIOT Applications
