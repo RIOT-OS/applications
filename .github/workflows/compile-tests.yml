@@ -1,0 +1,32 @@
+name: Compilation tests for RIOT-OS submodule update
+
+on:
+  push:
+    branches: [ master]
+    paths:
+    - RIOT
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+    branches: [ master ]
+    paths:
+    - RIOT
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        applications: [coap-chat, sniffer, spectrum-scanner]
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+
+    - name: Pull the latest riotbuild docker image
+      run: docker pull riot/riotbuild:latest
+
+    - name: Run compile tests
+      run: |
+        make BUILD_IN_DOCKER=1 -C ${{ matrix.applications }}
