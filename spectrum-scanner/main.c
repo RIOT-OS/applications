@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 Eistec AB
+ * Copyright (C) 2017-2018 Eistec AB
  *
  * This file is subject to the terms and conditions of the GNU Lesser
  * General Public License v2.1. See the file LICENSE in the top level
@@ -57,17 +57,22 @@
 void spectrum_scanner(unsigned long interval_us)
 {
     size_t netif_numof = gnrc_netif_numof();
+    if (netif_numof == 0) {
+        puts("No network interfaces found!");
+        return;
+    }
 
     /* Using expf(x) (natural exponent) gives quicker computations on Cortex-M0+,
      * compared to using powf(10, x). */
     /*
-     * This was optimized by testing different combinations of expf, powf, logf, log10f:
+     * This was optimized by testing different combinations of expf, powf, logf, log10f, ldexp, ilogbf:
      *
-     * functions used | measurement iterations per 0.5 s on reference system (frdm-kw41z)
-     * ------------------------------------------------------------------
-     * expf, logf     | 64
-     * powf, log10f   | 46
-     * expf, log10f   | 61
+     * functions used   | measurement iterations per 0.5 s on reference system (frdm-kw41z)
+     * --------------------------------------------------------------------
+     * expf, logf       | 64
+     * powf, log10f     | 46
+     * expf, log10f     | 61
+     * ldexpf, ilogbf   | 82
      * no-op (baseline) | 83 (but the measurements are useless)
      */
 
@@ -104,12 +109,12 @@ void spectrum_scanner(unsigned long interval_us)
                         continue;
                     }
                     /* Convert dB to pseudo-energy before summing together the
-                     * measurements. "Pseudo" because we use the natural
-                     * exponential function e^x instead of computing 10^x which
+                     * measurements. "Pseudo" because we use the binary
+                     * exponential function 2^x instead of computing 10^x which
                      * would be required if we needed the real measured energy.
                      * There is no need to know the real energy level because we
                      * will be converting back to dB again before printing. */
-                    ed_average[k][ch] += expf((float)level / 128.f);
+                    ed_average[k][ch] += ldexpf(1.f, level);
                 }
             }
             ++count;
@@ -125,10 +130,10 @@ void spectrum_scanner(unsigned long interval_us)
             print("] ", 2);
             for (unsigned int ch = IEEE802154_CHANNEL_MIN; ch <= IEEE802154_CHANNEL_MAX; ++ch) {
                 /* Compute the average pseudo-energy and convert back to dB */
-                ed_average[k][ch] = logf(ed_average[k][ch] / count) * 128.f;
+                int32_t ed = ilogbf(ed_average[k][ch] / count);
                 print_u32_dec(ch);
                 print(": ", 2);
-                print_float(ed_average[k][ch], 4);
+                print_s32_dec(ed);
                 print(", ", 2);
             }
             print("\n", 1);
